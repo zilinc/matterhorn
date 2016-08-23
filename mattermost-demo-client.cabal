@@ -25,7 +25,7 @@ executable mattermost-demo-client
                      , unordered-containers
                      , text
                      , bytestring
-                     , aeson
+                     , hslua
                      , process
                      , connection
                      , microlens-platform

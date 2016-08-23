@@ -2,10 +2,15 @@
 
 module Config (Config(..), getConfig) where
 
-import           Data.Aeson
-import qualified Data.ByteString.Lazy as BS
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import           Data.IORef
 import           Data.Text (Text)
 import qualified Data.Text as T
+import           Data.Text.Encoding (decodeUtf8)
+import           Foreign.C.Types (CInt)
+import           Scripting.Lua (LuaState)
+import qualified Scripting.Lua as Lua
 import           System.Exit (exitFailure)
 import           System.Process (readProcess)
 
@@ -14,36 +19,51 @@ data Config = Config
   , configHost     :: Text
   , configTeam     :: Text
   , configPort     :: Int
-  , configPass     :: Either String Text
+  , configPass     :: Text
   } deriving (Eq, Show)
 
-instance FromJSON Config where
-  parseJSON = withObject "config" $ \o -> do
-    configUser <- o .:  "user"
-    configHost <- o .:  "host"
-    configTeam <- o .:  "team"
-    configPort <- o .:  "port"
-    passCmd    <- o .:? "passcmd"
-    pass       <- o .:? "pass"
-    configPass <- case passCmd of
-      Nothing -> case pass of
-        Nothing     -> fail "Configuration needs either `pass` or `passcmd`"
-        Just passwd -> return (Right passwd)
-      Just cmd -> return (Left cmd)
-    return Config { .. }
+getTableVal :: Lua.StackValue a => LuaState -> ByteString -> IO (Maybe a)
+getTableVal l key = do
+  Lua.pushstring l key
+  Lua.gettable l 1
+  res <- Lua.peek l 2
+  Lua.pop l 1
+  return res
+
+connConf :: IORef Config -> LuaState -> IO CInt
+connConf confRef l = do
+  isTable <- Lua.istable l 1
+  if not isTable
+    then do
+      putStrLn "Argument not a table"
+      return 0
+    else do
+      Just configUser <- fmap decodeUtf8 `fmap` getTableVal l "user"
+      Just configHost <- fmap decodeUtf8 `fmap` getTableVal l "host"
+      Just configTeam <- fmap decodeUtf8 `fmap` getTableVal l "team"
+      Just configPort <- getTableVal l "port"
+      Just configPass <- fmap decodeUtf8 `fmap` getTableVal l "pass"
+      writeIORef confRef Config { .. }
+      return 0
 
 getConfig :: IO Config
 getConfig = do
-  bs <- BS.readFile "config.json"
-  case decode bs of
-    Nothing   -> do
-      putStrLn "No config.json found"
+  l <- Lua.newstate
+  Lua.openlibs l
+  Lua.newtable l
+  conf <- newIORef Config
+            { configUser = ""
+            , configHost = ""
+            , configTeam = ""
+            , configPort = 443
+            , configPass = ""
+            }
+  Lua.registerrawhsfunction l "connection" (connConf conf)
+  Lua.loadfile l "config.lua"
+  err <- Lua.pcall l 0 0 0
+  if err > 0 then do
+      rs <- Lua.tostring l (-1)
+      BS.putStrLn rs
       exitFailure
-    Just conf -> do
-      actualPass <- case configPass conf of
-        Left cmdString -> do
-          let (cmd:rest) = words cmdString
-          r <- readProcess cmd rest ""
-          return (T.pack (takeWhile (/= '\n') r))
-        Right pass -> return pass
-      return conf { configPass = Right actualPass }
+    else do
+      readIORef conf

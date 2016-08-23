@@ -106,7 +106,7 @@ setupState config = do
   let cd = mkConnectionData (T.unpack (configHost config))
                             (fromIntegral (configPort config))
                             ctx
-      Right pass = configPass config
+      pass = configPass config
       login = Login { username = configUser config
                     , password = pass
                     }
