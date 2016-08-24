@@ -38,13 +38,13 @@ main = do
   let shunt e = Chan.writeChan eventChan (WSEvent e)
 
   mmWithWebSocket (st^.csConn) (st^.csTok) shunt $ \c -> do
-    void $ customMain (Vty.mkVty def) eventChan app st
+    void $ customMain (Vty.mkVty def) eventChan (app config) st
 
-app :: App ChatState Event Int
-app = App
+app :: Config -> App ChatState Event Int
+app config = App
   { appDraw = chatDraw
   , appChooseCursor = \ _ (l:_) -> Just l
-  , appHandleEvent = onEvent
+  , appHandleEvent = onEvent config
   , appStartEvent = \ s -> return s
   , appAttrMap = \ _ -> def
   , appLiftVtyEvent = VtyEvent
@@ -76,13 +76,13 @@ chatDraw st =
 --       border userCmd
 --     ]
 
-onEvent :: ChatState -> Event -> EventM Int (Next ChatState)
-onEvent st (VtyEvent (Vty.EvKey Vty.KEsc [])) = halt st
-onEvent st (VtyEvent (Vty.EvKey Vty.KRight [])) =
+onEvent :: Config -> ChatState -> Event -> EventM Int (Next ChatState)
+onEvent _ st (VtyEvent (Vty.EvKey Vty.KEsc [])) = halt st
+onEvent _ st (VtyEvent (Vty.EvKey Vty.KRight [])) =
   continue (nextChannel st)
-onEvent st (VtyEvent (Vty.EvKey Vty.KLeft [])) =
+onEvent _ st (VtyEvent (Vty.EvKey Vty.KLeft [])) =
   continue (prevChannel st)
-onEvent st (VtyEvent (Vty.EvKey Vty.KEnter [])) = do
+onEvent _ st (VtyEvent (Vty.EvKey Vty.KEnter [])) = do
   let (line:_) = getEditContents (st^.cmdLine)
   let st' = st & cmdLine %~ applyEdit clearZipper
   case line of
@@ -90,13 +90,17 @@ onEvent st (VtyEvent (Vty.EvKey Vty.KEnter [])) = do
     _         -> do
       liftIO (sendMessage st' line)
       continue st'
-onEvent st (VtyEvent e) = do
+onEvent _ st (VtyEvent e) = do
   editor <- handleEditorEvent e (st^.cmdLine)
   continue (st & cmdLine .~ editor)
-onEvent st (WSEvent we) = do
+onEvent c st (WSEvent we) = do
   case weAction we of
     WMPosted -> case wepPost (weProps we) of
-      Just p  -> continue $ addMessage p st
+      Just p  -> do
+        let Just usr = userProfileUsername <$> (st ^. usrMap . at (postUserId p))
+            msg = postMessage p
+        liftIO $ runMessageCallback c usr msg
+        continue $ addMessage p st
       Nothing -> continue st
     WMPostEdited -> case wepPost (weProps we) of
       Just p  -> continue $ editMessage p st

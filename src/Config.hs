@@ -1,9 +1,10 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Config (Config(..), getConfig) where
+module Config (Config(..), getConfig, runMessageCallback) where
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS8
 import           Data.IORef
 import           Data.Text (Text)
 import qualified Data.Text as T
@@ -12,7 +13,6 @@ import           Foreign.C.Types (CInt)
 import           Scripting.Lua (LuaState)
 import qualified Scripting.Lua as Lua
 import           System.Exit (exitFailure)
-import           System.Process (readProcess)
 
 data Config = Config
   { configUser     :: Text
@@ -20,7 +20,8 @@ data Config = Config
   , configTeam     :: Text
   , configPort     :: Int
   , configPass     :: Text
-  } deriving (Eq, Show)
+  , configLuaState :: LuaState
+  }
 
 getTableVal :: Lua.StackValue a => LuaState -> ByteString -> IO (Maybe a)
 getTableVal l key = do
@@ -43,8 +44,22 @@ connConf confRef l = do
       Just configTeam <- fmap decodeUtf8 `fmap` getTableVal l "team"
       Just configPort <- getTableVal l "port"
       Just configPass <- fmap decodeUtf8 `fmap` getTableVal l "pass"
+      let configLuaState = l
       writeIORef confRef Config { .. }
       return 0
+
+runMessageCallback :: Config -> String -> String -> IO ()
+runMessageCallback Config { configLuaState = l } usr msg = do
+  Lua.getglobal l "on_message_received"
+  Lua.newtable l
+  Lua.pushstring l "user"
+  Lua.pushstring l (BS8.pack usr)
+  Lua.settable l 3
+  Lua.pushstring l "text"
+  Lua.pushstring l (BS8.pack msg)
+  Lua.settable l 3
+  _ <- Lua.pcall l 1 1 1
+  Lua.pop l 1
 
 getConfig :: IO Config
 getConfig = do
@@ -57,6 +72,7 @@ getConfig = do
             , configTeam = ""
             , configPort = 443
             , configPass = ""
+            , configLuaState = l
             }
   Lua.registerrawhsfunction l "connection" (connConf conf)
   Lua.loadfile l "config.lua"
