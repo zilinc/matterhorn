@@ -38,7 +38,7 @@ install:
  - sed -i 's/^jobs:/-- jobs:/' ${HOME}/.cabal/config
  - git clone https://github.com/dagit/mattermost-api
  - cd mattermost-api
- - cabal install
+ - cabal install mattermost-api
  - cd ..
  - cabal install --only-dependencies --enable-tests --enable-benchmarks --dry -v > installplan.txt
  - sed -i -e '1,/^Resolving /d' installplan.txt; cat installplan.txt
