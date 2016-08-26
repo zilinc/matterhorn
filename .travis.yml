@@ -37,7 +37,7 @@ install:
  - travis_retry cabal update -v
  - sed -i 's/^jobs:/-- jobs:/' ${HOME}/.cabal/config
  - git clone https://github.com/dagit/mattermost-api
- - echo 'packages: ./mattermost-api/mattermost-api.cabal\n         ./matterhorn.cabal' > cabal.project
+ - echo 'packages: ./mattermost-api/mattermost-api.cabal\\n         ./matterhorn.cabal' > cabal.project
  - cabal install --only-dependencies --enable-tests --enable-benchmarks --dry -v > installplan.txt
  - sed -i -e '1,/^Resolving /d' installplan.txt; cat installplan.txt
 
