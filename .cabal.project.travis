@@ -1,2 +1,0 @@
-packages: ./mattermost-api/mattermost-api.cabal
-          ./matterhorn.cabal
