@@ -31,3 +31,24 @@ findRight f z
           | n == zFocus zC = zC
           | f (focus zC)   = zC
           | otherwise      = go (right zC) n
+
+-- Shift the focus until a given element is found, or return the
+-- same zipper if none applies
+findLeft :: (a -> Bool) -> Zipper a -> Zipper a
+findLeft f z
+  | f (focus z) = z
+  | otherwise   = go (left z) (zFocus z)
+  where go zC n
+          | n == zFocus zC = zC
+          | f (focus zC)   = zC
+          | otherwise      = go (left zC) n
+
+updateList :: (Eq a) => [a] -> Zipper a -> Zipper a
+updateList newList oldZip = findLeft (== oldFocus) newZip
+  where oldFocus = focus oldZip
+        newZip   = oldZip { zElems = newList }
+
+filterZipper :: (Eq a) => (a -> Bool) -> Zipper a -> Zipper a
+filterZipper f oldZip = findLeft (== oldFocus) newZip
+  where oldFocus = focus oldZip
+        newZip   = oldZip { zElems = filter f $ zElems oldZip }

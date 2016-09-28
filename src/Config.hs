@@ -4,81 +4,130 @@ module Config
   ( Config(..)
   , PasswordSource(..)
   , findConfig
+  , getCredentials
   ) where
 
+import           Control.Monad.Trans.Except
+import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import           Data.Ini
 import           Data.Text (Text)
 import qualified Data.Text as T
-import           System.Directory (doesFileExist)
-import           System.Environment.XDG.BaseDir (getAllConfigFiles)
-import           System.Exit (exitFailure)
+import           Data.Monoid ((<>))
 import           System.Process (readProcess)
+import           Text.Read (readMaybe)
+
+import           IOUtil
+import           FilePaths
+
+-- These helper functions make our Ini parsing a LOT nicer
+type IniParser s a = ExceptT String ((->) (Text, s)) a
+type Section = HashMap Text Text
+
+-- Run the parser over an Ini file
+runParse :: IniParser Ini a -> Ini -> Either String a
+runParse mote ini = runExceptT mote ("", ini)
+
+-- Run parsing within a named section
+section :: Text -> IniParser Section a -> IniParser Ini a
+section name thunk = ExceptT $ \(_, Ini ini) ->
+  case HM.lookup name ini of
+    Nothing  -> Left ("No section named" ++ show name)
+    Just sec -> runExceptT thunk (name, sec)
+
+-- Retrieve a field, returning Nothing if it doesn't exist
+fieldM :: Text -> IniParser Section (Maybe Text)
+fieldM name = ExceptT $ \(_,m) ->
+  return (HM.lookup name m)
+
+-- Retrieve a field, failing to parse if it doesn't exist
+field :: Text -> IniParser Section Text
+field name = ExceptT $ \(sec,m) ->
+  case HM.lookup name m of
+    Nothing -> Left ("Missing field " ++ show name ++
+                     " in section " ++ show sec)
+    Just x  -> return x
+
+-- Retrieve a field and try to 'Read' it to a value, failing
+-- to parse if it doesn't exist or if the 'Read' operation
+-- fails.
+fieldR :: Read a => Text -> IniParser Section a
+fieldR name = do
+  str <- field name
+  case readMaybe (T.unpack str) of
+    Just x  -> return x
+    Nothing -> fail ("Unable to read field " ++ show name)
+
+fieldMR :: Read a => Text -> IniParser Section (Maybe a)
+fieldMR name = do
+  mb <- fieldM name
+  return $ case mb of
+    Nothing  -> Nothing
+    Just str -> readMaybe (T.unpack str)
 
 data PasswordSource =
     PasswordString Text
-    | PasswordCommand String
+    | PasswordCommand Text
     deriving (Eq, Read, Show)
 
 data Config = Config
-  { configUser     :: Text
-  , configHost     :: Text
-  , configTeam     :: Text
-  , configPort     :: Int
-  , configPass     :: PasswordSource
+  { configUser          :: Maybe Text
+  , configHost          :: Text
+  , configTeam          :: Maybe Text
+  , configPort          :: Int
+  , configPass          :: Maybe PasswordSource
+  , configTimeFormat    :: Maybe Text
+  , configTheme         :: Maybe Text
+  , configSmartBacktick :: Bool
   } deriving (Eq, Show)
 
-(??) :: Maybe a -> String -> Either String a
-(Just x) ?? _ = Right x
-Nothing  ?? s = Left ("Missing field: `" ++ s ++ "`")
-
-readT :: Read a => Text -> a
-readT = read . T.unpack
-
 fromIni :: Ini -> Either String Config
-fromIni (Ini ini) = do
-  cS <- HM.lookup "mattermost" ini ?? "mattermost"
-  configUser <- HM.lookup "user" cS ?? "user"
-  configHost <- HM.lookup "host" cS ?? "host"
-  configTeam <- HM.lookup "team" cS ?? "team"
-  configPort <- readT `fmap` (HM.lookup "port" cS ?? "port")
-  let passCmd = HM.lookup "passcmd" cS
-  let pass    = HM.lookup "pass" cS
-  configPass <- case passCmd of
-    Nothing -> case pass of
-      Nothing -> fail "Either `pass` or `passcmd` is needed."
-      Just p -> return (PasswordString p)
-    Just c -> return (PasswordCommand (T.unpack c))
-  return Config { .. }
+fromIni = runParse $ do
+  section "mattermost" $ do
+    configUser       <- fieldM  "user"
+    configHost       <- field   "host"
+    configTeam       <- fieldM  "team"
+    configPort       <- fieldR  "port"
+    configTimeFormat <- fieldM  "timeFormat"
+    configTheme      <- fieldM  "theme"
+    pass             <- fieldM  "pass"
+    passCmd          <- fieldM  "passcmd"
+    smartBacktick    <- fieldMR "smartbacktick"
+    let configPass = case passCmd of
+          Nothing -> case pass of
+            Nothing -> Nothing
+            Just p  -> Just (PasswordString p)
+          Just c -> Just (PasswordCommand c)
+        configSmartBacktick = case smartBacktick of
+          Nothing -> True
+          Just b  -> b
+    return Config { .. }
 
-findConfig :: IO Config
+findConfig :: IO (Either String Config)
 findConfig = do
-  xdgLocations <- getAllConfigFiles "matterhorn" "config.ini"
-  let confLocations = ["./config.ini"] ++ xdgLocations
-                                       ++ ["/etc/matterhorn/config.ini"]
-  loop confLocations
-  where loop [] = do
-          putStrLn "No matterhorn configuration found"
-          exitFailure
-        loop (c:cs) = do
-          ex <- doesFileExist c
-          if ex
-            then getConfig c
-            else loop cs
+    let err = "Configuration file " <> show configFileName <> " not found"
+    maybe (return $ Left err) getConfig =<< locateConfig configFileName
 
-getConfig :: FilePath -> IO Config
-getConfig fp = do
-  t <- readIniFile fp
+getConfig :: FilePath -> IO (Either String Config)
+getConfig fp = runExceptT $ do
+  t <- (convertIOException $ readIniFile fp) `catchE`
+       (\e -> throwE $ "Could not read " <> show fp <> ": " <> e)
   case t >>= fromIni of
     Left err -> do
-      putStrLn ("Unable to parse " ++ fp ++ ":")
-      putStrLn ("  " ++ err)
-      exitFailure
+      throwE $ "Unable to parse " ++ fp ++ ":" ++ err
     Right conf -> do
       actualPass <- case configPass conf of
-        PasswordCommand cmdString -> do
-          let (cmd:rest) = words cmdString
-          r <- readProcess cmd rest ""
-          return (T.pack (takeWhile (/= '\n') r))
-        PasswordString pass -> return pass
-      return conf { configPass = PasswordString actualPass }
+        Just (PasswordCommand cmdString) -> do
+          let (cmd:rest) = T.unpack <$> T.words cmdString
+          output <- convertIOException (readProcess cmd rest "") `catchE`
+                    (\e -> throwE $ "Could not execute password command: " <> e)
+          return $ Just $ T.pack (takeWhile (/= '\n') output)
+        Just (PasswordString pass) -> return $ Just pass
+        _ -> return Nothing
+      return conf { configPass = PasswordString <$> actualPass }
+
+getCredentials :: Config -> Maybe (Text, Text)
+getCredentials config = case (,) <$> configUser config <*> configPass config of
+  Nothing                    -> Nothing
+  Just (u, PasswordString p) -> Just (u, p)
+  _ -> error $ "BUG: unexpected password state: " <> show (configPass config)
