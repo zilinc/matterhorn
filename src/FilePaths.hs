@@ -9,6 +9,8 @@ module FilePaths
   , locateConfig
   ) where
 
+import Prelude ()
+import Prelude.Compat
 import Control.Monad (forM)
 import Data.Monoid ((<>))
 import Data.Maybe (listToMaybe)
