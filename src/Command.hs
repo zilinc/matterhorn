@@ -1,6 +1,8 @@
 {-# LANGUAGE GADTs #-}
 module Command where
 
+import Prelude ()
+import Prelude.Compat
 import Brick (EventM, Next, continue, halt)
 import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)

@@ -1,5 +1,7 @@
 module Connection where
 
+import           Prelude ()
+import           Prelude.Compat
 import           Control.Concurrent (forkIO, threadDelay)
 import qualified Control.Concurrent.Chan as Chan
 import           Control.Concurrent.MVar

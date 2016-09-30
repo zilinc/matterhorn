@@ -2,6 +2,8 @@ module Draw.Util
   ( wrappedText
   ) where
 
+import Prelude ()
+import Prelude.Compat
 import Brick
 import Lens.Micro.Platform
 import Text.LineBreak (breakString, BreakFormat(..))

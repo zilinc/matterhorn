@@ -2,6 +2,8 @@ module IOUtil
   ( convertIOException
   ) where
 
+import Prelude ()
+import Prelude.Compat
 import Control.Exception
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Except

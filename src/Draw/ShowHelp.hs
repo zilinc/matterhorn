@@ -1,5 +1,7 @@
 module Draw.ShowHelp (drawShowHelp) where
 
+import Prelude ()
+import Prelude.Compat
 import Brick
 import Brick.Widgets.Border
 import Brick.Widgets.Center (hCenter, centerLayer)

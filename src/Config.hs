@@ -7,6 +7,8 @@ module Config
   , getCredentials
   ) where
 
+import           Prelude ()
+import           Prelude.Compat
 import           Control.Monad.Trans.Except
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM

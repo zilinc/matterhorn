@@ -2,6 +2,8 @@
 {-# LANGUAGE PackageImports #-}
 module Draw.Main (drawMain) where
 
+import           Prelude ()
+import           Prelude.Compat
 import           Brick
 import           Brick.Widgets.Border
 import           Brick.Widgets.Border.Style

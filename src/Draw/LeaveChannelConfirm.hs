@@ -4,6 +4,8 @@ module Draw.LeaveChannelConfirm
     )
 where
 
+import Prelude ()
+import Prelude.Compat
 import Brick
 import Brick.Widgets.Center
 import Brick.Widgets.Border
