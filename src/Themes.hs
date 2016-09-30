@@ -34,6 +34,8 @@ module Themes
   , attrForUsername
   ) where
 
+import Prelude ()
+import Prelude.Compat
 import Data.Hashable (hash)
 import Data.Monoid ((<>))
 import Graphics.Vty
