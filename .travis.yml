@@ -2,10 +2,10 @@
 language: c
 sudo: false
 
-cache:
-  directories:
-    - $HOME/.cabsnap
-    - $HOME/.cabal/packages
+# cache:
+#   directories:
+#     - $HOME/.cabsnap
+#     - $HOME/.cabal/packages
 
 before_cache:
   - rm -fv $HOME/.cabal/packages/hackage.haskell.org/build-reports.log
