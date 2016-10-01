@@ -1,6 +1,8 @@
 {-# LANGUAGE MultiWayIf #-}
 module Events where
 
+import           Prelude ()
+import           Prelude.Compat
 import           Brick
 import           Brick.Widgets.Edit ( Editor
                                     , getEditContents

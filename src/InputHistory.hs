@@ -9,6 +9,8 @@ module InputHistory
   , removeChannelHistory
   ) where
 
+import Prelude ()
+import Prelude.Compat
 import Control.Monad.Trans.Except
 import Lens.Micro.Platform
 import qualified Data.HashMap.Strict as HM

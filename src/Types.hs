@@ -5,6 +5,8 @@
 
 module Types where
 
+import           Prelude ()
+import           Prelude.Compat
 import           Brick (EventM, txt, vBox, Next)
 import           Brick.AttrMap (AttrMap)
 import           Brick.Widgets.Edit (Editor, editor)

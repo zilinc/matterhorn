@@ -2,6 +2,8 @@
 
 module Main where
 
+import           Prelude ()
+import           Prelude.Compat
 import           Brick
 import           Control.Concurrent (forkIO)
 import qualified Control.Concurrent.Chan as Chan

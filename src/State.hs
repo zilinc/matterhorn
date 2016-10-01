@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module State where
 
+import           Prelude ()
+import           Prelude.Compat
 import           Brick (EventM)
 import           Brick.Widgets.Edit (getEditContents, editContentsL)
 import           Brick.Widgets.List (list)

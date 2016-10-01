@@ -4,6 +4,8 @@
 
 module Markdown (renderMarkdown) where
 
+import           Prelude ()
+import           Prelude.Compat
 import           Brick ( (<+>), Widget )
 import qualified Brick as B
 import           Cheapskate.Types ( Block
