@@ -15,12 +15,11 @@ import           Data.HashMap.Strict ((!))
 import           Brick.Main (viewportScroll, vScrollToEnd, vScrollToBeginning, vScrollBy)
 import           Brick.Widgets.Edit (applyEdit)
 import           Control.Exception (SomeException, catch, try)
-import           Control.Monad (forM, forM_, when, void)
+import           Control.Monad (forM, when, void)
 import           Data.Text.Zipper (textZipper, clearZipper, insertMany, gotoEOL)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Sequence as Seq
-import           Data.Foldable (toList)
-import           Data.List (sort, find)
+import           Data.List (sort)
 import           Data.Maybe (listToMaybe, maybeToList, fromJust)
 import           Data.Monoid ((<>))
 import           Data.Time.Clock ( getCurrentTime )
@@ -30,10 +29,14 @@ import qualified Data.Vector as V
 import qualified Data.Foldable as F
 import           Lens.Micro.Platform
 import           System.Exit (exitFailure)
+import           System.IO (Handle)
+import           System.Process (system)
+import           Cheapskate
 
 import           Network.Mattermost
 import           Network.Mattermost.Exceptions
 import           Network.Mattermost.Lenses
+import           Network.Mattermost.Logging (mmLoggerDebug)
 
 import           Config
 import           Types
@@ -512,12 +515,12 @@ mkChanNames :: User -> HM.HashMap UserId UserProfile -> Seq.Seq Channel -> MMNam
 mkChanNames myUser users chans = MMNames
   { _cnChans = sort
                [ channelName c
-               | c <- toList chans, channelType c /= Direct ]
+               | c <- F.toList chans, channelType c /= Direct ]
   , _cnDMs = sort
              [ channelName c
-             | c <- toList chans, channelType c == Direct ]
+             | c <- F.toList chans, channelType c == Direct ]
   , _cnToChanId = HM.fromList $
-                  [ (channelName c, channelId c) | c <- toList chans ] ++
+                  [ (channelName c, channelId c) | c <- F.toList chans ] ++
                   [ (userProfileUsername u, c)
                   | u <- HM.elems users
                   , c <- lookupChan (getDMChannelName (getId myUser) (getId u))
@@ -527,7 +530,7 @@ mkChanNames myUser users chans = MMNames
                   [ (userProfileUsername u, getId u) | u <- HM.elems users ]
   }
   where lookupChan n = [ c^.channelIdL
-                       | c <- toList chans, c^.channelNameL == n
+                       | c <- F.toList chans, c^.channelNameL == n
                        ]
 
 fetchUserStatuses :: ConnectionData -> Token
@@ -541,15 +544,20 @@ fetchUserStatuses cd token = do
       appState
       statusMap
 
-setupState :: Config -> RequestChan -> Chan.Chan Event -> IO ChatState
-setupState config requestChan eventChan = do
+setupState :: Maybe Handle -> Config -> RequestChan -> Chan.Chan Event -> IO ChatState
+setupState logFile config requestChan eventChan = do
   -- If we don't have enough credentials, ask for them.
   (uStr, pStr) <- case getCredentials config of
       Nothing -> interactiveGatherCredentials config
       Just (u, p) -> return (u, p)
 
-  cd <- initConnectionData (T.unpack (configHost config))
-                           (fromIntegral (configPort config))
+  let setLogger = case logFile of
+        Nothing -> id
+        Just f  -> \ cd -> cd `withLogger` mmLoggerDebug f
+
+  cd <- setLogger `fmap`
+          initConnectionData (T.unpack (configHost config))
+                             (fromIntegral (configPort config))
 
   let loginLoop (u, p) = do
         putStrLn "Authenticating..."
@@ -564,18 +572,18 @@ setupState config requestChan eventChan = do
   (token, myUser) <- loginLoop (uStr, pStr)
 
   initialLoad <- mmGetInitialLoad cd token
-  when (null $ initialLoadTeams initialLoad) $ do
+  when (Seq.null $ initialLoadTeams initialLoad) $ do
       putStrLn "Error: your account is not a member of any teams"
       exitFailure
 
   myTeam <- case configTeam config of
       Nothing -> do
-          interactiveTeamSelection $ toList $ initialLoadTeams initialLoad
+          interactiveTeamSelection $ F.toList $ initialLoadTeams initialLoad
       Just tName -> do
-          let matchingTeam = listToMaybe $ filter matches $ toList $ initialLoadTeams initialLoad
+          let matchingTeam = listToMaybe $ filter matches $ F.toList $ initialLoadTeams initialLoad
               matches t = teamName t == tName
           case matchingTeam of
-              Nothing -> interactiveTeamSelection (toList (initialLoadTeams initialLoad))
+              Nothing -> interactiveTeamSelection (F.toList (initialLoadTeams initialLoad))
               Just t -> return t
 
   quitCondition <- newEmptyMVar
@@ -591,15 +599,14 @@ setupState config requestChan eventChan = do
              , _crRequestQueue  = requestChan
              , _crEventQueue    = eventChan
              , _crTheme         = theme
-             , _crTimeFormat    = configTimeFormat config
              , _crQuitCondition = quitCondition
-             , _crSmartBacktick = configSmartBacktick config
+             , _crConfiguration = config
              }
   initializeState cr myTeam myUser
 
 initializeState :: ChatResources -> Team -> User -> IO ChatState
 initializeState cr myTeam myUser = do
-  let ChatResources token cd requestChan _ _ _ _ _ = cr
+  let ChatResources token cd requestChan _ _ _ _ = cr
   let myTeamId = getId myTeam
 
   Chan.writeChan requestChan $ fetchUserStatuses cd token
@@ -607,7 +614,7 @@ initializeState cr myTeam myUser = do
   putStrLn $ "Loading channels for team " <> show (teamName myTeam) <> "..."
   Channels chans cm <- mmGetChannels cd token myTeamId
 
-  msgs <- fmap (HM.fromList . toList) $ forM chans $ \c -> do
+  msgs <- fmap (HM.fromList . F.toList) $ forM (F.toList chans) $ \c -> do
     let chanData = cm ! getId c
         viewed   = chanData ^. channelDataLastViewedAtL
         updated  = c ^. channelLastPostAtL
@@ -649,11 +656,11 @@ initializeState cr myTeam myUser = do
              & csNames .~ chanNames
 
   -- Fetch town-square asynchronously, but put it in the queue early.
-  case find ((== townSqId) . getId) chans of
+  case F.find ((== townSqId) . getId) chans of
       Nothing -> return ()
       Just _ -> doAsync st $ liftIO $ asyncFetchScrollback st townSqId
 
-  forM_ chans $ \c ->
+  F.forM_ chans $ \c ->
       when (getId c /= townSqId && c^.channelTypeL /= Direct) $
           doAsync st $ asyncFetchScrollback st (getId c)
 
@@ -712,3 +719,50 @@ beginChannelSelect :: ChatState -> EventM Name ChatState
 beginChannelSelect st =
     return $ st & csMode          .~ ChannelSelect
                 & csChannelSelect .~ ""
+
+openMostRecentURL :: ChatState -> EventM Name ChatState
+openMostRecentURL st =
+    case configURLOpenCommand $ st^.csResources.crConfiguration of
+        Nothing -> do
+            msg <- newClientMessage Informative "Config option 'urlOpenCommand' missing; cannot open URL."
+            addClientMessage msg st
+        Just urlOpenCommand -> do
+            -- Get the messages for the current channel
+            let cId = currentChannelId st
+                chan = msgMap . ix cId
+                msgs = st ^. chan . ccContents . cdMessages
+
+                msgURLs :: Message -> Seq.Seq T.Text
+                msgURLs msg = mconcat $ blockGetURLs <$> (F.toList $ msg^.mText)
+
+                blockGetURLs :: Block -> Seq.Seq T.Text
+                blockGetURLs (Para is) = mconcat $ inlineGetURLs <$> F.toList is
+                blockGetURLs (Header _ is) = mconcat $ inlineGetURLs <$> F.toList is
+                blockGetURLs (Blockquote bs) = mconcat $ blockGetURLs <$> F.toList bs
+                blockGetURLs (List _ _ bss) = mconcat $ mconcat $ (blockGetURLs <$>) <$> (F.toList <$> bss)
+                blockGetURLs _ = mempty
+
+                inlineGetURLs :: Inline -> Seq.Seq T.Text
+                inlineGetURLs (Emph is) = mconcat $ inlineGetURLs <$> F.toList is
+                inlineGetURLs (Strong is) = mconcat $ inlineGetURLs <$> F.toList is
+                inlineGetURLs (Link is url "") = url Seq.<| (mconcat $ inlineGetURLs <$> F.toList is)
+                inlineGetURLs (Link is _ url) = url Seq.<| (mconcat $ inlineGetURLs <$> F.toList is)
+                inlineGetURLs (Image is _ _) = mconcat $ inlineGetURLs <$> F.toList is
+                inlineGetURLs _ = mempty
+
+                -- Search from the most recent message backwards until we find
+                -- one with one or more URLs
+                recentIdx = Seq.findIndexR (not . Seq.null . msgURLs) msgs
+
+            case recentIdx of
+                Nothing -> return ()
+                Just i -> do
+                    -- For each URL in the message, invoke the configured "url
+                    -- open command" if we have one
+                    --
+                    -- If no open command is available, show an error message.
+                    let Just msg = msgs Seq.!? i
+                    F.forM_ (msgURLs msg) $ \url -> do
+                        liftIO $ void $ system $ (T.unpack urlOpenCommand) <> " " <> show url
+
+            return st

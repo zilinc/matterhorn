@@ -12,9 +12,6 @@ HERE=$(cd `dirname $0`; pwd)
 # Where dependency repos get cloned
 DEPS=$HERE/deps
 
-# Where we'll put the package sandbox
-SANDBOX=$HERE/.cabal-sandbox
-
 # The source for the mattermost API package
 MATTERMOST_API_REPO=https://github.com/dagit/mattermost-api.git
 
@@ -25,10 +22,10 @@ MATTERMOST_DIR=$DEPS/mattermost-api
 FIRST_TIME=0
 
 function init {
-    if [ ! -d "$HERE/.cabal-sandbox" ]
+    if [ ! -d "$HERE/cabal.project.local" ]
     then
         FIRST_TIME=1
-        cabal sandbox --sandbox=$SANDBOX init
+        echo 'packages: deps/mattermost-api/mattermost-api.cabal' >cabal.project.local
     fi
 }
 
@@ -47,12 +44,6 @@ function clone_or_update_repo {
     else
         cd $destdir && git pull
     fi
-
-    if [ "$FIRST_TIME" == "1" ]
-    then
-        cd $HERE && \
-            cabal sandbox --sandbox=$SANDBOX add-source $destdir
-    fi
 }
 
 function install_deps {
@@ -66,11 +57,11 @@ function build {
     then
         # For first-time builds, get dependencies installed as fast as
         # possible.
-        cabal install -j
+        cabal new-build -j
     else
         # But for subsequent builds, build with -j1 to avoid suppression
         # of useful (e.g. warning) output.
-        cabal install -j1
+        cabal new-build -j1
     fi
 }
 

@@ -73,28 +73,30 @@ data PasswordSource =
     deriving (Eq, Read, Show)
 
 data Config = Config
-  { configUser          :: Maybe Text
-  , configHost          :: Text
-  , configTeam          :: Maybe Text
-  , configPort          :: Int
-  , configPass          :: Maybe PasswordSource
-  , configTimeFormat    :: Maybe Text
-  , configTheme         :: Maybe Text
-  , configSmartBacktick :: Bool
+  { configUser           :: Maybe Text
+  , configHost           :: Text
+  , configTeam           :: Maybe Text
+  , configPort           :: Int
+  , configPass           :: Maybe PasswordSource
+  , configTimeFormat     :: Maybe Text
+  , configTheme          :: Maybe Text
+  , configSmartBacktick  :: Bool
+  , configURLOpenCommand :: Maybe Text
   } deriving (Eq, Show)
 
 fromIni :: Ini -> Either String Config
 fromIni = runParse $ do
   section "mattermost" $ do
-    configUser       <- fieldM  "user"
-    configHost       <- field   "host"
-    configTeam       <- fieldM  "team"
-    configPort       <- fieldR  "port"
-    configTimeFormat <- fieldM  "timeFormat"
-    configTheme      <- fieldM  "theme"
-    pass             <- fieldM  "pass"
-    passCmd          <- fieldM  "passcmd"
-    smartBacktick    <- fieldMR "smartbacktick"
+    configUser           <- fieldM  "user"
+    configHost           <- field   "host"
+    configTeam           <- fieldM  "team"
+    configPort           <- fieldR  "port"
+    configTimeFormat     <- fieldM  "timeFormat"
+    configTheme          <- fieldM  "theme"
+    configURLOpenCommand <- fieldM  "urlOpenCommand"
+    pass                 <- fieldM  "pass"
+    passCmd              <- fieldM  "passcmd"
+    smartBacktick        <- fieldMR "smartbacktick"
     let configPass = case passCmd of
           Nothing -> case pass of
             Nothing -> Nothing
@@ -105,10 +107,11 @@ fromIni = runParse $ do
           Just b  -> b
     return Config { .. }
 
-findConfig :: IO (Either String Config)
-findConfig = do
+findConfig :: Maybe FilePath -> IO (Either String Config)
+findConfig Nothing = do
     let err = "Configuration file " <> show configFileName <> " not found"
     maybe (return $ Left err) getConfig =<< locateConfig configFileName
+findConfig (Just path) = getConfig path
 
 getConfig :: FilePath -> IO (Either String Config)
 getConfig fp = runExceptT $ do

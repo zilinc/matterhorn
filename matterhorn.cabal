@@ -39,13 +39,14 @@ executable matterhorn
                        TeamSelect
                        Login
                        Markdown
+                       Options
   default-extensions:  OverloadedStrings,
                        ScopedTypeVariables
   ghc-options:         -Wall -threaded
   build-depends:       base >=4.7 && <5
                      , mattermost-api
                      , unordered-containers
-                     , containers
+                     , containers >= 0.5.8
                      , text
                      , bytestring
                      , ini
@@ -57,7 +58,7 @@ executable matterhorn
                      , transformers
                      , text-zipper >= 0.8
                      , array
-                     , time
+                     , time >= 1.6
                      , linebreak
                      , xdg-basedir
                      , filepath
