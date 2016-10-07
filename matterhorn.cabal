@@ -54,7 +54,7 @@ executable matterhorn
                      , microlens-platform
                      , brick >= 0.10
                      , data-default
-                     , vty == 5.8
+                     , vty > 5.8
                      , transformers
                      , text-zipper >= 0.8
                      , array
