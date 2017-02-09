@@ -58,6 +58,7 @@ data Config = Config
   , configURLOpenCommand :: Maybe T.Text
   , configActivityBell   :: Bool
   , configShowMessagePreview :: Bool
+  , configLanguage           :: T.Text
   } deriving (Eq, Show)
 
 -- * 'MMNames' structures

@@ -40,17 +40,18 @@ import qualified Graphics.Vty as Vty
 import           Markdown
 import           State
 import           State.Common
+import qualified Strings as Str
 import           Themes
 import           Types
 import           Draw.Util
 
-renderChatMessage :: Set Text -> (UTCTime -> Widget Name) -> Message -> Widget Name
-renderChatMessage uSet renderTimeFunc msg =
+renderChatMessage :: ChatState -> Set Text -> (UTCTime -> Widget Name) -> Message -> Widget Name
+renderChatMessage st uSet renderTimeFunc msg =
     let m = renderMessage msg True uSet
         msgAtch = if Seq.null (msg^.mAttachments)
           then emptyWidget
           else withDefAttr clientMessageAttr $ vBox
-                 [ txt ("  [attached: `" <> a^.attachmentName <> "`]")
+                 [ txt (Str.get st (Str.SAttachment (a^.attachmentName))) -- ("  [attached: `" <> a^.attachmentName <> "`]")
                  | a <- F.toList (msg^.mAttachments)
                  ]
         msgReac = if Map.null (msg^.mReactions)
@@ -88,11 +89,11 @@ renderChannelList :: ChatState -> Widget Name
 renderChannelList st = hLimit channelListWidth $ viewport ChannelList Vertical $
                        vBox $ concat $ renderChannelGroup st <$> channelGroups
     where
-        channelGroups = [ ( "Channels"
+        channelGroups = [ ( Str.get st Str.SChannels -- "Channels"
                           , getOrdinaryChannels st
                           , st^.csChannelSelectChannelMatches
                           )
-                        , ( "Users"
+                        , ( Str.get st Str.SUsers --"Users"
                           , getDmChannels st
                           , st^.csChannelSelectUserMatches
                           )
@@ -209,9 +210,9 @@ previewFromInput uname s =
 renderUserCommandBox :: Set T.Text -> ChatState -> Widget Name
 renderUserCommandBox uSet st =
     let prompt = txt $ case st^.csEditState.cedEditMode of
-            Replying _ _ -> "reply> "
-            Editing _    ->  "edit> "
-            NewPost      ->      "> "
+            Replying _ _ -> Str.get st Str.SReplyPrompt <> "> " -- "reply> "
+            Editing _    -> Str.get st Str.SEditPrompt  <> "> " --  "edit> "
+            NewPost      -> "> "
         inputBox = renderEditor True (st^.cmdLine)
         curContents = getEditContents $ st^.cmdLine
         multilineContent = length curContents > 1
@@ -221,7 +222,7 @@ renderUserCommandBox uSet st =
                                   st^.cmdLine.editContentsL) <>
                    "/" <> (show $ length curContents) <> "]") <+>
             (hBorderWithLabel $ withDefAttr clientEmphAttr $
-             (str "In multi-line mode. Press M-e to finish."))
+             (txt $ Str.get st Str.SMultiLineMode))
 
         replyDisplay = case st^.csEditState.cedEditMode of
             Replying msg _ ->
@@ -233,15 +234,11 @@ renderUserCommandBox uSet st =
 
         commandBox = case st^.csEditState.cedMultiline of
             False ->
-                let linesStr = if numLines == 1
-                               then "line"
-                               else "lines"
-                    numLines = length curContents
+                let numLines = length curContents
                 in vLimit 1 $
                    prompt <+> if multilineContent
                               then ((withDefAttr clientEmphAttr $
-                                     str $ "[" <> show numLines <> " " <> linesStr <>
-                                           "; Enter: send, M-e: edit, Backspace: cancel] ")) <+>
+                                     txt $ Str.get st (Str.SMultiLinePrompt numLines))) <+>
                                    (txt $ head curContents) <+>
                                    (showCursor MessageInput (Location (0,0)) $ str " ")
                               else inputBox
@@ -252,14 +249,14 @@ maxMessageHeight :: Int
 maxMessageHeight = 200
 
 renderSingleMessage :: ChatState -> Set T.Text -> Message -> Widget Name
-renderSingleMessage st uSet msg = renderChatMessage uSet (withBrackets . renderTime st) msg
+renderSingleMessage st uSet msg = renderChatMessage st uSet (withBrackets . renderTime st) msg
 
 renderCurrentChannelDisplay :: Set Text -> ChatState -> Widget Name
 renderCurrentChannelDisplay uSet st = (header <+> conn) <=> messages
     where
     conn = case st^.csConnectionStatus of
       Connected -> emptyWidget
-      Disconnected -> withDefAttr errorMessageAttr (str "[NOT CONNECTED]")
+      Disconnected -> withDefAttr errorMessageAttr (txt (Str.get st Str.SNotConnected))
     header = withDefAttr channelHeaderAttr $
              padRight Max $
              case T.null topicStr of
@@ -277,9 +274,9 @@ renderCurrentChannelDisplay uSet st = (header <+> conn) <=> messages
 
     body = chatText <=> case chan^.ccInfo.cdCurrentState of
       ChanUnloaded   -> withDefAttr clientMessageAttr $
-                          txt "[Loading channel scrollback...]"
+                          txt (Str.get st Str.SLoadingChannelScrollback)
       ChanRefreshing -> withDefAttr clientMessageAttr $
-                          txt "[Refreshing scrollback...]"
+                          txt (Str.get st Str.SRefreshingScrollback)
       _              -> emptyWidget
 
     chatText = case st^.csMode of
@@ -288,7 +285,7 @@ renderCurrentChannelDisplay uSet st = (header <+> conn) <=> messages
             reportExtent (ChannelMessages cId) $
             cached (ChannelMessages cId) $
             vBox $ (withDefAttr loadMoreAttr $ hCenter $
-                    str "<< Press C-b to load more messages >>") :
+                    txt (Str.get st Str.SLoadMoreMessages)) :
                    (F.toList $ renderSingleMessage st uSet <$> channelMessages)
         MessageSelect ->
             renderMessagesWithSelect (st^.csMessageSelect) channelMessages
@@ -498,22 +495,20 @@ messageSelectBottomBar st =
                                 then Just $ k <> ":" <> desc
                                 else Nothing
         numURLs = Seq.length $ msgURLs postMsg
-        s = if numURLs == 1 then "" else "s"
         hasURLs = numURLs > 0
-        openUrlsMsg = "open " <> (T.pack $ show numURLs) <> " URL" <> s
         hasVerb = isJust (findVerbatimChunk (postMsg^.mText))
-        options = [ (const True,    "r", "reply")
-                  , (isMine st,     "e", "edit")
-                  , (isMine st,     "d", "delete")
-                  , (const hasURLs, "o", openUrlsMsg)
-                  , (const hasVerb, "y", "yank")
+        options = [ (const True,    "r", Str.get st Str.SReply)
+                  , (isMine st,     "e", Str.get st Str.SEdit)
+                  , (isMine st,     "d", Str.get st Str.SDelete)
+                  , (const hasURLs, "o", Str.get st (Str.SOpenUrls numURLs))
+                  , (const hasVerb, "y", Str.get st Str.SYank)
                   ]
         Just postMsg = getSelectedMessage st
 
     in hBox [ borderElem bsHorizontal
             , txt "["
             , withDefAttr messageSelectStatusAttr $
-              txt $ "Message select: " <> optionStr
+              txt $ Str.get st Str.SMessageSelect <> optionStr
             , txt "]"
             , hBorder
             ]
@@ -587,12 +582,12 @@ userInputArea uSet st =
                                         , withDefAttr clientEmphAttr $ txt "Escape"
                                         , txt " to stop scrolling and resume chatting."
                                         ]
-        MessageSelectDeleteConfirm -> renderDeleteConfirm
+        MessageSelectDeleteConfirm -> renderDeleteConfirm st
         _             -> renderUserCommandBox uSet st
 
-renderDeleteConfirm :: Widget Name
-renderDeleteConfirm =
-    hCenter $ txt "Are you sure you want to delete the selected message? (y/n)"
+renderDeleteConfirm :: ChatState -> Widget Name
+renderDeleteConfirm st =
+    hCenter $ txt $ Str.get st Str.SDeleteConfirm
 
 mainInterface :: ChatState -> Widget Name
 mainInterface st =

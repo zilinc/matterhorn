@@ -45,6 +45,7 @@ fromIni = do
     configPass <- (Just . PasswordCommand <$> field "passcmd") <|>
                   (Just . PasswordString  <$> field "pass") <|>
                   pure Nothing
+    configLanguage <- fieldDef "language" "eng"
     return Config { .. }
 
 defaultConfig :: Config
@@ -61,6 +62,7 @@ defaultConfig =
            , configURLOpenCommand     = Nothing
            , configActivityBell       = False
            , configShowMessagePreview = False
+           , configLanguage           = "eng"
            }
 
 findConfig :: Maybe FilePath -> IO (Either String Config)
