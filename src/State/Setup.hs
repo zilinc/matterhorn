@@ -28,6 +28,7 @@ import           Config
 import           InputHistory
 import           Login
 import           State.Common
+import           Strings
 import           TeamSelect
 import           Themes
 import           Types
@@ -193,6 +194,7 @@ setupState logFile config requestChan eventChan = do
              , _crTheme         = theme
              , _crQuitCondition = quitCondition
              , _crConfiguration = config
+             , _crStringMap     = getTranslation (configLanguage config)
              }
   initializeState cr myTeam myUser
 
@@ -206,7 +208,7 @@ loadAllProfiles cd token = go HM.empty 0
 
 initializeState :: ChatResources -> Team -> User -> IO ChatState
 initializeState cr myTeam myUser = do
-  let ChatResources token cd requestChan _ _ _ _ = cr
+  let ChatResources token cd requestChan _ _ _ _ _ = cr
   let myTeamId = getId myTeam
 
   Chan.writeChan requestChan $ fetchUserStatuses cd token

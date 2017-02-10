@@ -39,6 +39,7 @@ import           Prelude
 import           Zipper (Zipper, focusL)
 
 import           InputHistory
+import           Strings (Translation)
 
 data PasswordSource =
     PasswordString T.Text
@@ -473,6 +474,7 @@ data ChatResources = ChatResources
   , _crTheme         :: AttrMap
   , _crQuitCondition :: MVar ()
   , _crConfiguration :: Config
+  , _crStringMap     :: Translation
   }
 
 -- | The 'ChatEditState' value contains the editor widget itself
@@ -605,6 +607,9 @@ csUser :: UserId -> Lens' ChatState UserInfo
 csUser uId =
   lens (\ st -> (st^.usrMap) HM.! uId)
        (\ st n -> st & usrMap %~ HM.insert uId n)
+
+i18n :: Lens' ChatState Translation
+i18n = csResources.crStringMap
 
 -- ** Interim lenses for backwards compat
 

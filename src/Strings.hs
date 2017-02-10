@@ -1,41 +1,136 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Strings where
 
 import           Data.Monoid ((<>))
+import           Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Lens.Micro.Platform
 
-import           Types
+data Translation = Translation
+  { _trMsgs :: UIMessages
+  , _trErrs :: UIErrors
+  }
 
-get :: StringMessage s => ChatState -> s -> Text
-get st m = stringOf (st^.csResources.crConfiguration) m
+data UIMessages = UIMessages
+  { _sChannels                 :: Text
+  , _sUsers                    :: Text
+  , _sReplyPrompt              :: Text
+  , _sEditPrompt               :: Text
+  , _sMultiLineMode            :: Text
+  , _sMultiLinePrompt          :: Int -> Text
+  , _sNotConnected             :: Text
+  , _sLoadingChannelScrollback :: Text
+  , _sRefreshingScrollback     :: Text
+  , _sLoadMoreMessages         :: Text
+  , _sNewMessages              :: Text
+  , _sBotUser                  :: Text -> Text
+  , _sAttachment               :: Text -> Text
+  , _sReply                    :: Text
+  , _sEdit                     :: Text
+  , _sDelete                   :: Text
+  , _sOpenUrls                 :: Int -> Text
+  , _sYank                     :: Text
+  , _sMessageSelect            :: Text
+  , _sDeleteConfirm            :: Text
+  , _sURLs                     :: Text
+  , _sNoUrls                   :: Text
+  }
 
-class StringMessage s where
-  stringOf :: Config -> s -> Text
+data UIErrors = UIErrors
+  { _sErrLeaveDirectMessage :: Text
+    -- ^ ""
+  , _sErrNoTarget :: Text -> Text
+    -- ^ "No channel or user named []"
+  , _sErrUnknownCommand :: Text -> Text
+    -- ^ "Unknown command: []"
+  , _sErrInvalidCommand :: Text -> Text
+    -- ^ "Invalid command: []"
+  , _sErrRunningCommand :: Text -> Text
+    -- ^ "Error running command: []"
+  , _sErrMissingURLOpen :: Text
+    -- ^ "Config option 'urlOpenCommand' missing; cannot open URL."
+  }
 
-data UIString
-  = SChannels
-  | SUsers
-  | SReplyPrompt
-  | SEditPrompt
-  | SMultiLineMode
-  | SMultiLinePrompt Int
-  | SNotConnected
-  | SLoadingChannelScrollback
-  | SRefreshingScrollback
-  | SLoadMoreMessages
-  | SNewMessages
-  | SBotUser Text
-  | SAttachment Text
-  | SReply
-  | SEdit
-  | SDelete
-  | SOpenUrls Int
-  | SYank
-  | SMessageSelect
-  | SDeleteConfirm
-  | SURLs
-  | SNoUrls
+makeLenses ''Translation
+makeLenses ''UIMessages
+makeLenses ''UIErrors
+
+engMessages :: Translation
+engMessages = Translation
+  { _trMsgs = UIMessages
+      { _sChannels = "Channels"
+      , _sUsers = "Users"
+      , _sReplyPrompt = "reply"
+      , _sEditPrompt = "edit"
+      , _sMultiLineMode = "In multi-line mode. Press M-e to finish."
+      , _sMultiLinePrompt = \ n ->
+          ("[" <> T.pack (show n) <>
+           " " <> engPlur n "line" <>
+           "; Enter: send, M-e: edit, Backspace: cancel] ")
+      , _sNotConnected = "[NOT CONNECTED]"
+      , _sLoadingChannelScrollback = "[Loading channel scrollback...]"
+      , _sRefreshingScrollback = "[Refreshing scrollback...]"
+      , _sLoadMoreMessages = "<< Press C-b to load more messages >>"
+      , _sNewMessages = "New Messages"
+      , _sBotUser = \ u -> u <> "[BOT]"
+      , _sAttachment = \ a -> "  [attached `" <> a <> "`]"
+      , _sReply = "reply"
+      , _sEdit  = "edit"
+      , _sDelete = "delete"
+      , _sOpenUrls = \ n ->
+          "open " <> T.pack (show n) <> " " <> engPlur n "URL"
+      , _sYank = "yank"
+      , _sMessageSelect = "Message select: "
+      , _sDeleteConfirm = "Are you sure you want to delete the selected message? (y/n)"
+      , _sURLs = "URLs: "
+      , _sNoUrls = "No URLs found in this channel."
+      }
+  , _trErrs = UIErrors
+      { _sErrLeaveDirectMessage = ""
+      , _sErrNoTarget = \ t -> "No channel or user named " <> t
+      , _sErrUnknownCommand = \ t -> "Unknown command: " <> t
+      , _sErrInvalidCommand = \ t -> "Invalid command: " <> t
+      , _sErrRunningCommand = \ t -> "Error running command: " <> t
+      , _sErrMissingURLOpen = "Config option 'urlOpenCommand' missing: cannot open URL."
+      }
+  }
+
+epoMessages :: Translation
+epoMessages = Translation
+  { _trMsgs = UIMessages
+      { _sChannels = "Kanaloj"
+      , _sUsers = "Uzantoj"
+      , _sReplyPrompt = "respondi"
+      , _sEditPrompt = "redakti"
+      , _sMultiLineMode = "Je multliniamodo. Premu M-e per fini."
+      , _sMultiLinePrompt = \ n ->
+    "[" <> T.pack (show n) <> " " <> epoPlur n "linio" <> "; Enigo: sendi, M-e: redakti, Retropaŝo: nuligi] "
+      , _sNotConnected = "[MALKONEKTATE]"
+      , _sLoadingChannelScrollback = "[Ŝargante kanalantaŭlogon...]"
+      , _sRefreshingScrollback = "[Freŝigante kanalantaŭlogon...]"
+      , _sLoadMoreMessages = "<< Premu C-b per ŝargi plijn mesaĝojn >>"
+      , _sNewMessages = "Novaj Mesaĝoj"
+      , _sBotUser = \ u -> u <> "[ROBOTO]"
+      , _sAttachment = \ a -> "  [afiksata: `" <> a <> "`]"
+      , _sReply = "respondi"
+      , _sEdit  = "redakti"
+      , _sDelete = "viŝi"
+      , _sOpenUrls = \ n ->
+    "apertu " <> T.pack (show n) <> " " <> engPlur n "URL"
+      , _sYank = "kopii"
+      , _sMessageSelect = "Mesaĝelektaĵo: "
+      , _sDeleteConfirm = "Ĉu vi estas certa, ke vi volas viŝi la elektitajn mesaĝojn? (y/n)"
+      , _sURLs = "URLs: "
+      , _sNoUrls = "Neniu adresoj trovitaj je tiu ĉi kanelo."
+      }
+  }
+
+getTranslation :: Text -> Translation
+getTranslation "epo" = epoMessages
+getTranslation _     = engMessages
 
 -- | Currently a hack; make this better!
 engPlur :: Int -> Text -> Text
@@ -47,84 +142,9 @@ epoPlur :: Int -> Text -> Text
 epoPlur 1 t = t
 epoPlur _ t = t <> "j"
 
-instance StringMessage UIString where
-  stringOf cf msg = case configLanguage cf of
-    "epo" -> case msg of
-      SChannels -> "Kanaloj"
-      SUsers -> "Uzantoj"
-      SReplyPrompt -> "respondi"
-      SEditPrompt -> "redakti"
-      SMultiLineMode -> "Je multliniamodo. Premu M-e per fini."
-      SMultiLinePrompt n ->
-        "[" <> T.pack (show n) <> " " <> epoPlur n "linio" <> "; Enigo: sendi, M-e: redakti, Retropaŝo: nuligi] "
-      SNotConnected -> "[MALKONEKTATE]"
-      SLoadingChannelScrollback -> "[Ŝargante kanalantaŭlogon...]"
-      SRefreshingScrollback -> "[Freŝigante kanalantaŭlogon...]"
-      SLoadMoreMessages -> "<< Premu C-b per ŝargi plijn mesaĝojn >>"
-      SNewMessages -> "Novaj Mesaĝoj"
-      SBotUser u -> u <> "[ROBOTO]"
-      SAttachment a -> "  [afiksata: `" <> a <> "`]"
-      SReply -> "respondi"
-      SEdit  -> "redakti"
-      SDelete -> "viŝi"
-      SOpenUrls n ->
-        "apertu " <> T.pack (show n) <> " " <> engPlur n "URL"
-      SYank -> "kopii"
-      SMessageSelect -> "Mesaĝelektaĵo: "
-      SDeleteConfirm -> "Ĉu vi estas certa, ke vi volas viŝi la elektitajn mesaĝojn? (y/n)"
-      SURLs -> "URLs: "
-      SNoUrls -> "Neniu adresoj trovitaj je tiu ĉi kanelo."
-    _ -> case msg of
-      SChannels -> "Channels"
-      SUsers -> "Users"
-      SReplyPrompt -> "reply"
-      SEditPrompt -> "edit"
-      SMultiLineMode -> "In multi-line mode. Press M-e to finish."
-      SMultiLinePrompt n ->
-        "[" <> T.pack (show n) <> " " <> engPlur n "line" <> "; Enter: send, M-e: edit, Backspace: cancel] "
-      SNotConnected -> "[NOT CONNECTED]"
-      SLoadingChannelScrollback -> "[Loading channel scrollback...]"
-      SRefreshingScrollback -> "[Refreshing scrollback...]"
-      SLoadMoreMessages -> "<< Press C-b to load more messages >>"
-      SNewMessages -> "New Messages"
-      SBotUser u -> u <> "[BOT]"
-      SAttachment a -> "  [attached `" <> a <> "`]"
-      SReply -> "reply"
-      SEdit  -> "edit"
-      SDelete -> "delete"
-      SOpenUrls n ->
-        "open " <> T.pack (show n) <> " " <> engPlur n "URL"
-      SYank -> "yank"
-      SMessageSelect -> "Message select: "
-      SDeleteConfirm -> "Are you sure you want to delete the selected message? (y/n)"
-      SURLs -> "URLs: "
-      SNoUrls -> "No URLs found in this channel."
-
-data ErrorMessage
-  = SErrLeaveDirectMessage
-    -- ^ ""
-  | SErrNoTarget Text
-    -- ^ "No channel or user named []"
-  | SErrUnknownCommand Text
-    -- ^ "Unknown command: []"
-  | SErrInvalidCommand Text
-    -- ^ "Invalid command: []"
-  | SErrRunningCommand Text
-    -- ^ "Error running command: []"
-  | SErrMissingURLOpen
-    -- ^ "Config option 'urlOpenCommand' missing; cannot open URL."
 
 data MessageString
   = SAvailableThemes [Text]
     -- ^ "Available built-in themes:"
   | SChannelJoin Text
   | SChannelLeave Text
-
-instance StringMessage MessageString where
-  stringOf cf msg = case configLanguage cf of
-    "epo" -> case msg of
-      _ -> "malimplemata"
-    _ -> case msg of
-      SAvailableThemes as -> T.intercalate "\n\n" ("Available themes:" : (("  " <>) <$> as))
-      SChannelJoin u -> undefined
-      SChannelLeave u -> undefined

@@ -40,7 +40,7 @@ import qualified Graphics.Vty as Vty
 import           Markdown
 import           State
 import           State.Common
-import qualified Strings as Str
+import           Strings
 import           Themes
 import           Types
 import           Draw.Util
@@ -51,7 +51,7 @@ renderChatMessage st uSet renderTimeFunc msg =
         msgAtch = if Seq.null (msg^.mAttachments)
           then emptyWidget
           else withDefAttr clientMessageAttr $ vBox
-                 [ txt (Str.get st (Str.SAttachment (a^.attachmentName))) -- ("  [attached: `" <> a^.attachmentName <> "`]")
+                 [ txt (st^.i18n.trMsgs.sAttachment.ix (a^.attachmentName))
                  | a <- F.toList (msg^.mAttachments)
                  ]
         msgReac = if Map.null (msg^.mReactions)
@@ -89,11 +89,11 @@ renderChannelList :: ChatState -> Widget Name
 renderChannelList st = hLimit channelListWidth $ viewport ChannelList Vertical $
                        vBox $ concat $ renderChannelGroup st <$> channelGroups
     where
-        channelGroups = [ ( Str.get st Str.SChannels -- "Channels"
+        channelGroups = [ ( st^.i18n.trMsgs.sChannels -- "Channels"
                           , getOrdinaryChannels st
                           , st^.csChannelSelectChannelMatches
                           )
-                        , ( Str.get st Str.SUsers --"Users"
+                        , ( st^.i18n.trMsgs.sUsers --"Users"
                           , getDmChannels st
                           , st^.csChannelSelectUserMatches
                           )
@@ -210,8 +210,8 @@ previewFromInput uname s =
 renderUserCommandBox :: Set T.Text -> ChatState -> Widget Name
 renderUserCommandBox uSet st =
     let prompt = txt $ case st^.csEditState.cedEditMode of
-            Replying _ _ -> Str.get st Str.SReplyPrompt <> "> " -- "reply> "
-            Editing _    -> Str.get st Str.SEditPrompt  <> "> " --  "edit> "
+            Replying _ _ -> st^.i18n.trMsgs.sReplyPrompt <> "> " -- "reply> "
+            Editing _    -> st^.i18n.trMsgs.sEditPrompt  <> "> " --  "edit> "
             NewPost      -> "> "
         inputBox = renderEditor True (st^.cmdLine)
         curContents = getEditContents $ st^.cmdLine
@@ -222,7 +222,7 @@ renderUserCommandBox uSet st =
                                   st^.cmdLine.editContentsL) <>
                    "/" <> (show $ length curContents) <> "]") <+>
             (hBorderWithLabel $ withDefAttr clientEmphAttr $
-             (txt $ Str.get st Str.SMultiLineMode))
+             (txt $ st^.i18n.trMsgs.sMultiLineMode))
 
         replyDisplay = case st^.csEditState.cedEditMode of
             Replying msg _ ->
@@ -238,7 +238,7 @@ renderUserCommandBox uSet st =
                 in vLimit 1 $
                    prompt <+> if multilineContent
                               then ((withDefAttr clientEmphAttr $
-                                     txt $ Str.get st (Str.SMultiLinePrompt numLines))) <+>
+                                     txt $ st^.i18n.trMsgs.sMultiLinePrompt.ix numLines)) <+>
                                    (txt $ head curContents) <+>
                                    (showCursor MessageInput (Location (0,0)) $ str " ")
                               else inputBox
@@ -256,7 +256,7 @@ renderCurrentChannelDisplay uSet st = (header <+> conn) <=> messages
     where
     conn = case st^.csConnectionStatus of
       Connected -> emptyWidget
-      Disconnected -> withDefAttr errorMessageAttr (txt (Str.get st Str.SNotConnected))
+      Disconnected -> withDefAttr errorMessageAttr (txt (st^.i18n.trMsgs.sNotConnected))
     header = withDefAttr channelHeaderAttr $
              padRight Max $
              case T.null topicStr of
@@ -274,9 +274,9 @@ renderCurrentChannelDisplay uSet st = (header <+> conn) <=> messages
 
     body = chatText <=> case chan^.ccInfo.cdCurrentState of
       ChanUnloaded   -> withDefAttr clientMessageAttr $
-                          txt (Str.get st Str.SLoadingChannelScrollback)
+                          txt (st^.i18n.trMsgs.sLoadingChannelScrollback)
       ChanRefreshing -> withDefAttr clientMessageAttr $
-                          txt (Str.get st Str.SRefreshingScrollback)
+                          txt (st^.i18n.trMsgs.sRefreshingScrollback)
       _              -> emptyWidget
 
     chatText = case st^.csMode of
@@ -285,7 +285,7 @@ renderCurrentChannelDisplay uSet st = (header <+> conn) <=> messages
             reportExtent (ChannelMessages cId) $
             cached (ChannelMessages cId) $
             vBox $ (withDefAttr loadMoreAttr $ hCenter $
-                    txt (Str.get st Str.SLoadMoreMessages)) :
+                    txt (st^.i18n.trMsgs.sLoadMoreMessages)) :
                    (F.toList $ renderSingleMessage st uSet <$> channelMessages)
         MessageSelect ->
             renderMessagesWithSelect (st^.csMessageSelect) channelMessages
@@ -497,18 +497,18 @@ messageSelectBottomBar st =
         numURLs = Seq.length $ msgURLs postMsg
         hasURLs = numURLs > 0
         hasVerb = isJust (findVerbatimChunk (postMsg^.mText))
-        options = [ (const True,    "r", Str.get st Str.SReply)
-                  , (isMine st,     "e", Str.get st Str.SEdit)
-                  , (isMine st,     "d", Str.get st Str.SDelete)
-                  , (const hasURLs, "o", Str.get st (Str.SOpenUrls numURLs))
-                  , (const hasVerb, "y", Str.get st Str.SYank)
+        options = [ (const True,    "r", st^.i18n.trMsgs.sReply)
+                  , (isMine st,     "e", st^.i18n.trMsgs.sEdit)
+                  , (isMine st,     "d", st^.i18n.trMsgs.sDelete)
+                  , (const hasURLs, "o", st^.i18n.trMsgs.sOpenUrls.ix numURLs)
+                  , (const hasVerb, "y", st^.i18n.trMsgs.sYank)
                   ]
         Just postMsg = getSelectedMessage st
 
     in hBox [ borderElem bsHorizontal
             , txt "["
             , withDefAttr messageSelectStatusAttr $
-              txt $ Str.get st Str.SMessageSelect <> optionStr
+              txt $ st^.i18n.trMsgs.sMessageSelect <> optionStr
             , txt "]"
             , hBorder
             ]
@@ -587,7 +587,7 @@ userInputArea uSet st =
 
 renderDeleteConfirm :: ChatState -> Widget Name
 renderDeleteConfirm st =
-    hCenter $ txt $ Str.get st Str.SDeleteConfirm
+    hCenter $ txt $ st^.i18n.trMsgs.sDeleteConfirm
 
 mainInterface :: ChatState -> Widget Name
 mainInterface st =
