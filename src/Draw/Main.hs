@@ -210,8 +210,8 @@ previewFromInput uname s =
 renderUserCommandBox :: Set T.Text -> ChatState -> Widget Name
 renderUserCommandBox uSet st =
     let prompt = txt $ case st^.csEditState.cedEditMode of
-            Replying _ _ -> st^.i18n.trMsgs.sReplyPrompt <> "> " -- "reply> "
-            Editing _    -> st^.i18n.trMsgs.sEditPrompt  <> "> " --  "edit> "
+            Replying _ _ -> st^.i18n.trMsgs.sReplyPrompt <> "> "
+            Editing _    -> st^.i18n.trMsgs.sEditPrompt  <> "> "
             NewPost      -> "> "
         inputBox = renderEditor True (st^.cmdLine)
         curContents = getEditContents $ st^.cmdLine
@@ -389,7 +389,8 @@ renderCurrentChannelDisplay uSet st = (header <+> conn) <=> messages
         return $ emptyResult & imageL .~ img
 
     channelMessages =
-        insertTransitions (getDateFormat st)
+        insertTransitions st
+                          (getDateFormat st)
                           (st ^. timeZone)
                           (getNewMessageCutoff cId st)
                           (getMessageListing cId st)
@@ -432,8 +433,8 @@ getMessageListing :: ChannelId -> ChatState -> Seq.Seq Message
 getMessageListing cId st =
     st ^. msgMap . ix cId . ccContents . cdMessages
 
-insertTransitions :: Text -> TimeZone -> Maybe UTCTime -> Seq.Seq Message -> Seq.Seq Message
-insertTransitions fmt tz cutoff ms = fst $ F.foldl' nextMsg initState ms
+insertTransitions :: ChatState -> Text -> TimeZone -> Maybe UTCTime -> Seq.Seq Message -> Seq.Seq Message
+insertTransitions st fmt tz cutoff ms = fst $ F.foldl' nextMsg initState ms
     where
         initState :: (Seq.Seq Message, Maybe Message)
         initState = (mempty, Nothing)
@@ -442,7 +443,7 @@ insertTransitions fmt tz cutoff ms = fst $ F.foldl' nextMsg initState ms
                                                  (utcToLocalTime tz d)))
                             Nothing d (C DateTransition) False False
                             Seq.empty NotAReply Nothing mempty Nothing
-        newMessagesMsg d = Message (getBlocks (T.pack "New Messages"))
+        newMessagesMsg d = Message (getBlocks (st^.i18n.trMsgs.sNewMessages))
                                    Nothing d (C NewMessagesTransition)
                                    False False Seq.empty NotAReply
                                    Nothing mempty Nothing
@@ -478,7 +479,7 @@ findUserByDMChannelName userMap dmchan me = listToMaybe
 renderChannelSelect :: ChatState -> Widget Name
 renderChannelSelect st =
     withDefAttr channelSelectPromptAttr $
-    (txt "Switch to channel: ") <+>
+    (txt $ (st^.i18n.trMsgs.sSwitchToChannel) <> ": ") <+>
      (showCursor ChannelSelectString (Location (T.length $ st^.csChannelSelectString, 0)) $
       txt $
       (if T.null $ st^.csChannelSelectString
@@ -559,29 +560,22 @@ inputPreview uSet st | not $ st^.csShowMessagePreview = emptyWidget
                   st^.cmdLine.editContentsL
     curStr = T.intercalate "\n" curContents
     previewMsg = previewFromInput uname curStr
-    thePreview = let noPreview = str "(No preview)"
+    thePreview = let noPreview = txt (st^.i18n.trMsgs.sNoPreview.to prn)
                      msgPreview = case previewMsg of
                        Nothing -> noPreview
                        Just pm -> if T.null curStr
                                   then noPreview
                                   else renderMessage pm True uSet
                  in (maybePreviewViewport msgPreview) <=>
-                    hBorderWithLabel (withDefAttr clientEmphAttr $ str "[Preview ↑]")
+                    hBorderWithLabel (withDefAttr clientEmphAttr
+                                      $ txt (bkt ((st^.i18n.trMsgs.sPreview) <> " ↑")))
 
 userInputArea :: Set T.Text -> ChatState -> Widget Name
 userInputArea uSet st =
     case st^.csMode of
         ChannelSelect -> renderChannelSelect st
-        UrlSelect     -> hCenter $ hBox [ txt "Press "
-                                        , withDefAttr clientEmphAttr $ txt "Enter"
-                                        , txt " to open the selected URL or "
-                                        , withDefAttr clientEmphAttr $ txt "Escape"
-                                        , txt " to cancel."
-                                        ]
-        ChannelScroll -> hCenter $ hBox [ txt "Press "
-                                        , withDefAttr clientEmphAttr $ txt "Escape"
-                                        , txt " to stop scrolling and resume chatting."
-                                        ]
+        UrlSelect     -> hCenter $ uiStringToWidget (st^.i18n.trMsgs.sURLSelectHelp)
+        ChannelScroll -> hCenter $ uiStringToWidget (st^.i18n.trMsgs.sChannelScrollHelp)
         MessageSelectDeleteConfirm -> renderDeleteConfirm st
         _             -> renderUserCommandBox uSet st
 
@@ -616,11 +610,11 @@ renderUrlList st =
     header <=> urlDisplay
     where
         header = withDefAttr channelHeaderAttr $ vLimit 1 $
-                 (txt $ "URLs: " <> (st^.csCurrentChannel.ccInfo.cdName)) <+>
+                 (txt $ (st^.i18n.trMsgs.sURLs) <> (st^.csCurrentChannel.ccInfo.cdName)) <+>
                  fill ' '
 
         urlDisplay = if F.length urls == 0
-                     then str "No URLs found in this channel."
+                     then txt (st^.i18n.trMsgs.sNoUrls)
                      else renderList renderItem True urls
 
         urls = st^.csUrlList

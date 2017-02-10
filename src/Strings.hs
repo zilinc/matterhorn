@@ -1,13 +1,47 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Strings where
 
+import           Brick (AttrName, Widget, txt, withDefAttr, hBox)
+import qualified Data.Foldable as F
 import           Data.Monoid ((<>))
 import           Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
 import           Data.Text (Text)
 import qualified Data.Text as T
+import           GHC.Exts (IsString(..), IsList(..))
 import           Lens.Micro.Platform
+
+import           Themes
+
+data UIString = UIString (Seq UIStringFragment)
+  deriving (Eq, Show)
+
+instance IsString UIString where
+  fromString s = UIString [fromString s]
+
+instance IsList UIString where
+  type Item UIString = UIStringFragment
+  fromList = UIString . fromList
+  toList (UIString l) = toList l
+
+data UIStringFragment = UISFrag (Maybe AttrName) Text
+  deriving (Eq, Show)
+
+instance IsString UIStringFragment where
+  fromString s = UISFrag Nothing (fromString s)
+
+uiStringToWidget :: UIString -> Widget a
+uiStringToWidget (UIString s) = hBox (F.toList (fmap go s))
+  where go (UISFrag Nothing  t) = txt t
+        go (UISFrag (Just a) t) = withDefAttr a (txt t)
+
+bkt :: Text -> Text
+bkt t = "[" <> t <> "]"
+
+prn :: Text -> Text
+prn t = "(" <> t <> ")"
 
 data Translation = Translation
   { _trMsgs :: UIMessages
@@ -37,6 +71,12 @@ data UIMessages = UIMessages
   , _sDeleteConfirm            :: Text
   , _sURLs                     :: Text
   , _sNoUrls                   :: Text
+  , _sLoadingChannelList       :: Text
+  , _sSwitchToChannel          :: Text
+  , _sNoPreview                :: Text
+  , _sPreview                  :: Text
+  , _sURLSelectHelp            :: UIString
+  , _sChannelScrollHelp        :: UIString
   }
 
 data UIErrors = UIErrors
@@ -87,6 +127,20 @@ engMessages = Translation
       , _sDeleteConfirm = "Are you sure you want to delete the selected message? (y/n)"
       , _sURLs = "URLs: "
       , _sNoUrls = "No URLs found in this channel."
+      , _sLoadingChannelList = "[Loading channel list]"
+      , _sSwitchToChannel = "Switch to channel"
+      , _sNoPreview = "No preview"
+      , _sPreview = "Preview"
+      , _sURLSelectHelp = [ "Press "
+                          , UISFrag (Just clientEmphAttr) "Enter"
+                          , " to open the selected URL or "
+                          , UISFrag (Just clientEmphAttr) "Escape"
+                          , " to cancel."
+                          ]
+      , _sChannelScrollHelp = [ "Press "
+                              , UISFrag (Just clientEmphAttr) "Escape"
+                              , " to stop scrolling and resume chatting."
+                              ]
       }
   , _trErrs = UIErrors
       { _sErrLeaveDirectMessage = ""
@@ -125,6 +179,28 @@ epoMessages = Translation
       , _sDeleteConfirm = "Ĉu vi estas certa, ke vi volas viŝi la elektitajn mesaĝojn? (y/n)"
       , _sURLs = "URLs: "
       , _sNoUrls = "Neniu adresoj trovitaj je tiu ĉi kanelo."
+      , _sLoadingChannelList = "[Ŝargante kanelliston...]"
+      , _sSwitchToChannel = "Aliĝi kanelon"
+      , _sNoPreview = "Neniu antaŭvido"
+      , _sPreview = "Antaŭvido"
+      , _sURLSelectHelp = [ "Premu "
+                          , UISFrag (Just clientEmphAttr) "Enigon"
+                          , " per tralegi la elektatan adreson aŭ "
+                          , UISFrag (Just clientEmphAttr) "Retropaŝon"
+                          , " per nuligi."
+                          ]
+      , _sChannelScrollHelp = [ "Premu "
+                              , UISFrag (Just clientEmphAttr) "Eskapon"
+                              , " per halti rulumon kaj rekomenci babilejon."
+                              ]
+      }
+  , _trErrs = UIErrors
+      { _sErrLeaveDirectMessage = ""
+      , _sErrNoTarget = \ t -> "No channel or user named " <> t
+      , _sErrUnknownCommand = \ t -> "Unknown command: " <> t
+      , _sErrInvalidCommand = \ t -> "Invalid command: " <> t
+      , _sErrRunningCommand = \ t -> "Error running command: " <> t
+      , _sErrMissingURLOpen = "Config option 'urlOpenCommand' missing: cannot open URL."
       }
   }
 
