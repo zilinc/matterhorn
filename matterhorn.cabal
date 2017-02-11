@@ -54,6 +54,7 @@ executable matterhorn
                        Options
                        Paths_matterhorn
                        Strings
+                       Strings.Helpers
   default-extensions:  OverloadedStrings,
                        ScopedTypeVariables
   ghc-options:         -Wall -threaded

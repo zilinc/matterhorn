@@ -1,36 +1,17 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module Strings where
 
-import           Brick (AttrName, Widget, txt, withDefAttr, hBox)
+import           Brick (Widget, txt, withDefAttr, hBox)
 import qualified Data.Foldable as F
 import           Data.Monoid ((<>))
-import           Data.Sequence (Seq)
 import           Data.Text (Text)
 import qualified Data.Text as T
-import           GHC.Exts (IsString(..), IsList(..))
 import           Lens.Micro.Platform
 
 import           Themes
-
-data UIString = UIString (Seq UIStringFragment)
-  deriving (Eq, Show)
-
-instance IsString UIString where
-  fromString s = UIString [fromString s]
-
-instance IsList UIString where
-  type Item UIString = UIStringFragment
-  fromList = UIString . fromList
-  toList (UIString l) = toList l
-
-data UIStringFragment = UISFrag (Maybe AttrName) Text
-  deriving (Eq, Show)
-
-instance IsString UIStringFragment where
-  fromString s = UISFrag Nothing (fromString s)
+import           Strings.Helpers
 
 uiStringToWidget :: UIString -> Widget a
 uiStringToWidget (UIString s) = hBox (F.toList (fmap go s))
@@ -132,13 +113,13 @@ engMessages = Translation
       , _sNoPreview = "No preview"
       , _sPreview = "Preview"
       , _sURLSelectHelp = [ "Press "
-                          , UISFrag (Just clientEmphAttr) "Enter"
+                          , clientEmphAttr %> "Enter"
                           , " to open the selected URL or "
-                          , UISFrag (Just clientEmphAttr) "Escape"
+                          , clientEmphAttr %> "Escape"
                           , " to cancel."
                           ]
       , _sChannelScrollHelp = [ "Press "
-                              , UISFrag (Just clientEmphAttr) "Escape"
+                              , clientEmphAttr %> "Escape"
                               , " to stop scrolling and resume chatting."
                               ]
       }
@@ -184,13 +165,13 @@ epoMessages = Translation
       , _sNoPreview = "Neniu antaŭvido"
       , _sPreview = "Antaŭvido"
       , _sURLSelectHelp = [ "Premu "
-                          , UISFrag (Just clientEmphAttr) "Enigon"
+                          , clientEmphAttr %> "Enigon"
                           , " per tralegi la elektatan adreson aŭ "
-                          , UISFrag (Just clientEmphAttr) "Retropaŝon"
+                          , clientEmphAttr %> "Retropaŝon"
                           , " per nuligi."
                           ]
       , _sChannelScrollHelp = [ "Premu "
-                              , UISFrag (Just clientEmphAttr) "Eskapon"
+                              , clientEmphAttr %> "Eskapon"
                               , " per halti rulumon kaj rekomenci babilejon."
                               ]
       }
@@ -207,16 +188,6 @@ epoMessages = Translation
 getTranslation :: Text -> Translation
 getTranslation "epo" = epoMessages
 getTranslation _     = engMessages
-
--- | Currently a hack; make this better!
-engPlur :: Int -> Text -> Text
-engPlur 1 t = t
-engPlur _ t = t <> "s"
-
--- | Esperanto plural
-epoPlur :: Int -> Text -> Text
-epoPlur 1 t = t
-epoPlur _ t = t <> "j"
 
 
 data MessageString
